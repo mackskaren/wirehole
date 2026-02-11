@@ -1,10 +1,15 @@
 networks:
-  private_network:
+  dns_subnet:
     ipam:
       driver: default
       config:
-        - subnet: 10.2.0.0/29
-  # mackspi_vlan: # use if you want to give containers addresses on network and not private NAT
+        - subnet: 10.2.0.240/29
+  vpn_subnet:
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.2.0.248/29
+  # pi_vlan: # use if you want to give containers addresses on network and not private NAT
   #   driver: macvlan
   #   driver_opts:
   #     parent: eth0
@@ -25,8 +30,8 @@ services:
     volumes:
       - ./unbound:/opt/unbound/etc/unbound/
     networks:
-      private_network:
-        ipv4_address: 10.2.0.3
+      dns_subnet:
+        ipv4_address: 10.2.0.242
     cap_add:
       - NET_ADMIN
     env_file: .env
@@ -42,8 +47,8 @@ services:
       # - 5000:5000
       - 51820:51820/udp
     networks:
-      private_network:
-        ipv4_address: 10.2.0.4
+      vpn_subnet:
+        ipv4_address: 10.2.0.250
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
@@ -65,11 +70,11 @@ services:
       #- PERSISTENTKEEPALIVE_PEERS=all #optional
       # - LOG_CONFS=true #optional
     healthcheck:
-      test: ["CMD", "ping", "-c", "1", "10.2.0.2"]
+      test: ["CMD", "ping", "-c", "1", "10.2.0.251"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 15s
 
 
   # wireguard-ui:
@@ -96,9 +101,6 @@ services:
     image: pihole/pihole:latest
     restart: unless-stopped
     hostname: pihole
-    # dns:
-    #   - 127.0.0.1
-    #   - ${PIHOLE_DNS}
     volumes:
       - ./etc-pihole/:/etc/pihole/
       - ./etc-dnsmasq.d/:/etc/dnsmasq.d/
@@ -110,15 +112,17 @@ services:
       - ${PIHOLE_WEBPORT}:80/tcp
       - 8443:443/tcp
     networks:
-      private_network:
-        ipv4_address: 10.2.0.2
-      # mackspi_vlan:
+      dns_subnet:
+        ipv4_address: 10.2.0.243
+      vpn_subnet:
+        ipv4_address: 10.2.0.251
+      # pi_vlan:
       #   ipv4_address: 192.168.1.249
     env_file: ./.env
     environment:
       - TZ=${TIMEZONE}
       - FTLCONF_webserver_api_password=${WEBPASSWORD}
       - FTLCONF_dns_revServers=${REV_SERVER:-false},${REV_SERVER_CIDR},${REV_SERVER_TARGET},${REV_SERVER_DOMAIN}
-      - FTLCONF_dns_upstreams=10.2.0.3
+      - FTLCONF_dns_upstreams=10.2.0.242
       - FTLCONF_dns_dnssec="true"
       - FTLCONF_dns_listeningMode=single
