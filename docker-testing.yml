@@ -50,7 +50,7 @@ services:
     - PEERDNS=172.19.0.2 #optional
     - INTERNAL_SUBNET=10.13.13.0 #optional
     - ALLOWEDIPS=0.0.0.0/0 #optional
-    - PERSISTENTKEEPALIVE_PEERS=EthanPhone,AustinPhone #optional
+    - PERSISTENTKEEPALIVE_PEERS= #optional
     - LOG_CONFS=true #optional
     volumes:
     - ./config:/config
