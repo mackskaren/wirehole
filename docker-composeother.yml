@@ -1,0 +1,62 @@
+networks:
+  private_network:
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.2.0.0/29
+
+services:
+  pihole:
+    container_name: pihole
+    image: mpgirro/pihole-unbound:latest
+    hostname: pihole
+    domainname: pihole.local
+    ports:
+      - 8443:443/tcp
+      - 53:53/tcp
+      - 53:53/udp
+      - ${PIHOLE_WEBPORT:-80}:81/tcp #Allows use of different port to access pihole web interface when other docker containers use port 80
+      - 5335:5335/tcp # Uncomment to enable unbound access on local server
+      - 22/tcp # Uncomment to enable SSH
+    environment:
+      # - FTLCONF_LOCAL_IPV4=192.168.0.26
+      - TZ=America/New_York
+      - FTLCONF_webserver_api_password=${WEBPASSWORD}
+      - FTLCONF_dns_revServers=${REV_SERVER:-false},${REV_SERVER_CIDR},${REV_SERVER_TARGET},${REV_SERVER_DOMAIN}
+      - FTLCONF_dns_upstreams=127.0.0.1#5335
+      - FTLCONF_dns_dnssec="true"
+      - FTLCONF_dns_listeningMode=single
+      - FTLCONF_webserver_port=${PIHOLE_WEBPORT}
+      - DNSSEC="true"
+      - DNSMASQ_LISTENING=single
+    volumes:
+      - etc_pihole-unbound:/etc/pihole:rw
+      - etc_pihole_dnsmasq-unbound:/etc/dnsmasq.d:rw
+    restart: unless-stopped
+
+  wireguard:
+    image: lscr.io/linuxserver/wireguard:latest
+    container_name: wireguard
+    cap_add:
+    - NET_ADMIN
+    - SYS_MODULE #optional
+    environment:
+    - PUID=1000
+    - PGID=1000
+    - TZ=America/Chicago
+    - SERVERURL=auto #optional
+    - SERVERPORT=51820 #optional
+    - PEERS=EthanPhone,AustinPhone #optional
+    - PEERDNS=172.19.0.2 #optional
+    - INTERNAL_SUBNET=10.13.13.0 #optional
+    - ALLOWEDIPS=0.0.0.0/0 #optional
+    - PERSISTENTKEEPALIVE_PEERS=EthanPhone,AustinPhone #optional
+    - LOG_CONFS=true #optional
+    volumes:
+    - ./config:/config
+    - /lib/modules:/lib/modules #optional
+    ports:
+    - 51820:51820/udp
+    sysctls:
+    - net.ipv4.conf.all.src_valid_mark=1
+    restart: unless-stopped

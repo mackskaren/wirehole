@@ -1,13 +1,24 @@
-version: "3"
 networks:
   private_network:
     ipam:
       driver: default
       config:
-        - subnet: 10.2.0.0/24
+        - subnet: 10.2.0.0/29
+  # mackspi_vlan: # use if you want to give containers addresses on network and not private NAT
+  #   driver: macvlan
+  #   driver_opts:
+  #     parent: eth0
+
+  #   ipam:
+  #     config:
+  #       - subnet: "192.168.1.0/24" # host network subnet
+  #       - gateway: "192.168.1.1" # router
+  #       # - ip_range: "192.168.1.248/30" # subnet of ips for docker to use
+
+
 services:
   unbound:
-    image: mvance/unbound:latest
+    image: mvance/unbound-rpi:latest
     container_name: unbound
     restart: unless-stopped
     hostname: unbound
@@ -15,45 +26,68 @@ services:
       - ./unbound:/opt/unbound/etc/unbound/
     networks:
       private_network:
-        ipv4_address: 10.2.0.200
+        ipv4_address: 10.2.0.3
     cap_add:
       - NET_ADMIN
     env_file: .env
+
   wireguard:
     depends_on:
       - unbound
       - pihole
-    image: linuxserver/wireguard
+    image: lscr.io/linuxserver/wireguard:latest #linuxserver/wireguard
     container_name: wireguard
+    restart: unless-stopped
     ports:
-      - 5000:5000
+      # - 5000:5000
       - 51820:51820/udp
+    networks:
+      private_network:
+        ipv4_address: 10.2.0.4
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
-      - net.ipv4.ip_forward=1
+      # - net.ipv4.ip_forward=1
     volumes:
       - ./config:/config
     env_file: .env
+    environment:
+      - TZ=${TIMEZONE}
+      - PUID=1000
+      - PGID=1000
+      - SERVERURL=mackspivpn.myddns.me
+      - PEERS=${WIREGUARD_PEERS}
+      - PEERDNS=auto #optional
+      - INTERNAL_SUBNET=10.13.13.0 #optional
+      - ALLOWEDIPS=0.0.0.0/0 #optional
+      #- PERSISTENTKEEPALIVE_PEERS=all #optional
+      # - LOG_CONFS=true #optional
+    healthcheck:
+      test: ["CMD", "ping", "-c", "1", "10.2.0.2"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
-  wireguard-ui:
-    image: ngoduykhanh/wireguard-ui:latest
-    container_name: wireguard-ui
-    depends_on:
-      - wireguard
-    cap_add:
-      - NET_ADMIN
-    network_mode: service:wireguard
-    logging:
-      driver: json-file
-      options:
-        max-size: 50m
-    volumes:
-      - ./db:/app/db
-      - ./config:/config
-    env_file: .env
+
+  # wireguard-ui:
+  #   image: ngoduykhanh/wireguard-ui:latest
+  #   container_name: wireguard-ui
+  #   depends_on:
+  #     - wireguard
+  #   cap_add:
+  #     - NET_ADMIN
+  #   network_mode: service:wireguard
+  #   logging:
+  #     driver: json-file
+  #     options:
+  #       max-size: 50m
+  #   volumes:
+  #     - ./db:/app/db
+  #     - ./config:/config
+  #   env_file: .env
 
   pihole:
     depends_on:
@@ -62,15 +96,29 @@ services:
     image: pihole/pihole:latest
     restart: unless-stopped
     hostname: pihole
-    dns:
-      - 127.0.0.1
-      - ${PIHOLE_DNS}
+    # dns:
+    #   - 127.0.0.1
+    #   - ${PIHOLE_DNS}
     volumes:
       - ./etc-pihole/:/etc/pihole/
       - ./etc-dnsmasq.d/:/etc/dnsmasq.d/
     cap_add:
       - NET_ADMIN
+    ports:
+      - 53:53/tcp
+      - 53:53/udp
+      - ${PIHOLE_WEBPORT}:80/tcp
+      - 8443:443/tcp
     networks:
       private_network:
-        ipv4_address: 10.2.0.100
+        ipv4_address: 10.2.0.2
+      # mackspi_vlan:
+      #   ipv4_address: 192.168.1.249
     env_file: ./.env
+    environment:
+      - TZ=${TIMEZONE}
+      - FTLCONF_webserver_api_password=${WEBPASSWORD}
+      - FTLCONF_dns_revServers=${REV_SERVER:-false},${REV_SERVER_CIDR},${REV_SERVER_TARGET},${REV_SERVER_DOMAIN}
+      - FTLCONF_dns_upstreams=10.2.0.3
+      - FTLCONF_dns_dnssec="true"
+      - FTLCONF_dns_listeningMode=single
